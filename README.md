@@ -33,8 +33,8 @@ environments).
 
 ## Configuration
 
-The first time you run `spt`, it will create a `spt.conf` file in the same
-directory. You can edit this file to customize the timer sequence.
+The first time you run `spt`, it will create a `spt.conf` file in the user
+HOME/bin directory. You can edit this file to customize the timer sequence.
 
 The format is one timer per line: `minutes:Comment`
 
