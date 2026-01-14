@@ -1,8 +1,14 @@
+# Nim
+#
+# Simple pomodoro time application written in Nim
+
 import os, times, strformat, strutils
 
 const
   VERSION = "spt-1.0"
   CONFIG_FILE = "spt.conf"
+  BaseDir = "bin"
+  AppDirName = "spt_dir"
 
 type
   Timer = object
@@ -24,34 +30,27 @@ let defaultTimers: seq[Timer] = @[
   Timer(tmr: initDuration(minutes = 15), cmt: "Time to take a nap!")
 ]
 
+# Create the application directory
+proc getSptDir(): string =
+  result = joinPath(getHomeDir(), Basedir, AppDirName)
+  if not dirExists(result):
+    createDir(result)
+
+# Write Timer configuration
 proc writeDefaultConfig(): seq[string] =
   var lines: seq[string]
   for t in defaultTimers:
-    let mins = t.tmr.inSeconds div 60
+    let mins = t.tmr.inMinutes
     lines.add(fmt"{mins}:{t.cmt}")
   try:
-    writeFile(CONFIG_FILE, lines.join("\n"))
+    writeFile(joinPath(getSptDir(), CONFIG_FILE), lines.join("\n"))
     echo fmt"Created default configuration file at '{CONFIG_FILE}'"
   except IOError:
     echo fmt"Warning: Could not write default config to '{CONFIG_FILE}'"
   return lines
 
-proc loadTimers(): seq[Timer] =
-  var lines: seq[string]
-
-  if fileExists(CONFIG_FILE):
-    try:
-      lines = readFile(CONFIG_FILE).strip.splitLines
-    except IOError:
-      echo fmt"Warning: Could not read '{CONFIG_FILE}'. Using default timers."
-      return defaultTimers
-  else:
-    echo fmt"Info: Config file '{CONFIG_FILE}' not found."
-    lines = writeDefaultConfig()
-
-  if lines.len == 0:
-    return defaultTimers
-
+# Parse the timers
+proc parseTimers(lines: seq[string]): seq[Timer] =
   var timers: seq[Timer]
   for i, line in lines:
     if line.strip.len == 0 or line.startsWith("#"):
@@ -73,9 +72,31 @@ proc loadTimers(): seq[Timer] =
 
   return timers
 
-proc notifySend(cmt: string, notifyCmt: string) =
+
+# Load Timer configuration
+proc loadTimers(): seq[Timer] =
+  var lines: seq[string]
+
+  if fileExists(joinPath(getSptDir(), CONFIG_FILE)):
+    try:
+      lines = readFile(joinPath(getSptDir(), CONFIG_FILE)).strip.splitLines
+    except IOError:
+      echo fmt"Warning: Could not read '{CONFIG_FILE}'. Using default timers."
+      return defaultTimers
+  else:
+    echo fmt"Info: Config file '{CONFIG_FILE}' not found."
+    lines = writeDefaultConfig()
+
+  if lines.len == 0:
+    return defaultTimers
+
+  parseTimers(lines)
+
+# Display spt notification
+proc notifySend(timeCmt: string, notifyCmt: string) =
   let cmd = "notify-send"
-  var finalCmt = cmt
+  var finalCmt = timeCmt
+
   if notifyCmt.len > 0:
     finalCmt = finalCmt & " - " & notifyCmt
 
@@ -88,10 +109,10 @@ proc notifySend(cmt: string, notifyCmt: string) =
   if execShellCmd(cmd & " " & args) != 0:
     echo "Error: Failed to send notification."
 
+# Parse cli parameters
 proc parseArgs(): StartupConfig =
   var args = commandLineParams()
   var i = 0
-  var result: StartupConfig
 
   while i < args.len:
     let arg = args[i]
@@ -113,11 +134,12 @@ proc parseArgs(): StartupConfig =
     i += 1
   return result
 
+# Start looping the sequence of Timers
 proc startTimer(timers: seq[Timer], notifyCmt: string) =
-  for i, timer in timers:
-    let mins = timer.tmr.inSeconds div 60
+  for _, timer in timers:
+    let mins = timer.tmr.inMinutes
     echo fmt"Timer started: {timer.cmt} ({mins} min)"
-    notifySend(timer.cmt, notifyCmt)
+    notifysend(timer.cmt, notifyCmt)
 
     sleep(timer.tmr.inMilliseconds)
 
@@ -125,6 +147,7 @@ proc startTimer(timers: seq[Timer], notifyCmt: string) =
   echo finalMsg
   notifySend(finalMsg, notifyCmt)
 
+# App entry point
 proc main() =
   let config = parseArgs()
   let timers = loadTimers()
